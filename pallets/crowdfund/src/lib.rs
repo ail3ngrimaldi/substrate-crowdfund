@@ -66,18 +66,48 @@ pub mod pallet {
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		/// Crea un proyecto.
-		pub fn crear_proyecto(origen: OriginFor<T>, nombre: String) -> DispatchResult {
-			// Completar este método.
-			todo!()
+		pub fn crear_proyecto(origen: OriginFor<T>, nombre: Vec<u8>) -> DispatchResult {
+			let _quien = ensure_signed(origen)?;
+		
+			let nombre_acotado: Result<NombreProyecto<T>, _> = NombreProyecto::<T>::try_from(nombre.clone());
+			let nombre_acotado = match nombre_acotado {
+				Ok(v) => v,
+				Err(_) => return Err(Error::<T>::NombreMuyLargo.into()),
+			};
+		
+			let longitud_nombre = nombre_acotado.len() as u32;
+			ensure!(longitud_nombre >= T::LargoMinimoNombreProyecto::get(), Error::<T>::NombreMuyCorto);
+			ensure!(longitud_nombre <= T::LargoMaximoNombreProyecto::get(), Error::<T>::NombreMuyLargo);
+		
+			let balance_cero = BalanceDe::<T>::from(0u32);
+			Proyectos::<T>::insert(nombre_acotado, balance_cero);
+		
+			Ok(())
 		}
+		
 
 		pub fn apoyar_proyecto(
 			origen: OriginFor<T>,
 			nombre: String,
 			cantidad: BalanceDe<T>,
 		) -> DispatchResult {
-			// Completar este método.
-			todo!()
+
+			let remitente = ensure_signed(origen)?;
+
+			let nombre_bounded: NombreProyecto<T> = nombre.clone().try_into().unwrap();
+		
+			ensure!(Proyectos::<T>::contains_key(&nombre_bounded), Error::<T>::ProyectoNoExiste);
+
+			let saldo_actual = T::Currency::free_balance(&remitente);
+			ensure!(saldo_actual >= cantidad, Error::<T>::FondosInsuficientes);
+
+			let saldo_proyecto = Proyectos::<T>::get(&nombre_bounded);
+			let nuevo_saldo_proyecto = saldo_proyecto + cantidad;
+			Proyectos::<T>::insert(&nombre_bounded, nuevo_saldo_proyecto);
+
+			T::Currency::withdraw(&remitente, cantidad, frame_support::traits::WithdrawReasons::TRANSFER, frame_support::traits::ExistenceRequirement::KeepAlive)?;
+		
+			Ok(())
 		}
 	}
 }
